@@ -1,6 +1,9 @@
 #include <dpp/cluster.h>
+#include <dpp_utils/command_controller.h>
 #include <dpp_utils/database.h>
 #include <dpp_utils/database_exception.h>
+
+void test_cmd(const dpp::slashcommand_t &event, const std::string &name) {}
 
 int main() {
     dpp::cluster cluster;

@@ -8,7 +8,7 @@ if (${PostgreSQL_FOUND})
     set(PG_FILES src/database.cpp)
 endif ()
 
-add_library(dpp_utils STATIC ${PG_FILES})
+add_library(dpp_utils STATIC include/dpp_utils/command_controller.h ${PG_FILES})
 
 target_compile_features(dpp_utils PUBLIC cxx_std_17)
 target_compile_features(dpp_utils PRIVATE cxx_variadic_templates)
