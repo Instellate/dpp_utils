@@ -7,19 +7,6 @@
 
 namespace dpp_utils {
 
-template <typename T> class command_controller_base {
-  public:
-    virtual ~command_controller_base() = default;
-
-  private:
-    struct register_methods {
-        register_methods() { T::init_commands(); }
-    };
-
-    static register_methods _methods;
-    virtual void *touch() { return &_methods; }
-};
-
 namespace internal {
 
 template <typename> struct function_info;
@@ -55,7 +42,9 @@ struct command_executor final : public command_executor_base {
 
     using info = function_info<Function>;
 
-    void execute_command(const dpp::slashcommand_t &event) override {}
+    void execute_command(const dpp::slashcommand_t &event) override {
+        process(event, 0);
+    }
 
   private:
     template <typename... Args>
@@ -99,5 +88,113 @@ struct command_executor final : public command_executor_base {
 };
 
 } // namespace internal
+
+struct injectable_base {
+    virtual ~injectable_base() = 0;
+};
+
+using injectable_base_ptr = std::unique_ptr<injectable_base>;
+using injectable_constructor =
+    std::function<injectable_base_ptr &(const service_provider_ptr &)>;
+
+class service_provider final {
+    std::unordered_map<size_t, injectable_constructor> _injectables;
+
+    service_provider(
+        std::unordered_map<size_t, injectable_constructor> &&injectables)
+        : _injectables(std::move(injectables)) {}
+
+  public:
+    class builder {
+        std::unordered_map<size_t, injectable_constructor> _injectables;
+
+      public:
+        builder() = default;
+
+        template <typename T> builder &add_singleton_service() {
+            this->_injectables.emplace(
+                typeid(T).hash_code(),
+                [](const service_provider_ptr &provider) {
+                    static std::optional<std::unique_ptr<T>> value;
+                    if (value.has_value()) {
+                        return value.value();
+                    } else {
+                        value =
+                            std::make_unique<T>(T::create_instance(provider));
+                        return value.value();
+                    }
+                });
+
+            return *this;
+        }
+    };
+
+    service_provider(const service_provider &) = delete;
+    service_provider(service_provider &&) = delete;
+
+    service_provider &operator=(const service_provider &) = delete;
+    service_provider &operator=(service_provider &&) = delete;
+
+    template <typename T> std::unique_ptr<T> &get_service() const {
+        auto it = this->_injectables.find(typeid(T).hash_code());
+        if (it == this->_injectables.end()) {
+            return nullptr;
+        }
+
+        auto &ptr = it->second;
+        return reinterpret_cast<std::unique_ptr<T> &>(ptr);
+    }
+
+    template <typename T> std::unique_ptr<T> &et_required_service() const {
+        auto it = this->_injectables.find(typeid(T).hash_code());
+        if (it == this->_injectables.end()) {
+            throw std::invalid_argument{"Couldn't find type specified"};
+        }
+
+        auto &ptr = it->second;
+        return reinterpret_cast<std::unique_ptr<T> &>(ptr);
+    }
+
+  private:
+};
+
+using service_provider_ptr = std::shared_ptr<service_provider>;
+
+template <typename T> class injectable : public injectable_base {
+  private:
+    template <typename... Args>
+    static T create_instance_templ(const service_provider_ptr &provider,
+                                   Args... args) {
+        using info =
+            internal::function_info<T>; // Getting constructor arguments
+
+        constexpr size_t arg_count = sizeof...(Args);
+        if constexpr (arg_count < info::arguments_count) {
+
+        } else if constexpr (arg_count == info::arguments_count) {
+
+        } else {
+            throw std::runtime_error{"Impossible condition"};
+        }
+    }
+
+  public:
+    static T create_instance(const service_provider_ptr &provider) {
+        return create_instance_templ(provider);
+    }
+};
+
+template <typename T> class command_controller_base : public injectable<T> {
+  public:
+    virtual ~command_controller_base() = default;
+
+  private:
+    struct register_methods {
+        register_methods() { T::init_commands(); }
+    };
+
+    static register_methods _methods;
+    virtual void *touch() { return &_methods; }
+};
 
 } // namespace dpp_utils
